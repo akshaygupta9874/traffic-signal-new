@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1E2226">
+<title>Signal guard</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../common/base.css">
+<style>
+  body{display:flex;flex-direction:column;height:100dvh;overflow:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  .bar{display:flex;align-items:center;gap:14px;padding:10px 16px;min-height:48px}
+  .bar .live{font-weight:600}
+  .bar .lat{color:var(--dim);font-variant-numeric:tabular-nums}
+  .bar .fill{flex:1}
+  .ghost{background:none;border:1px solid var(--line);border-radius:999px;padding:6px 14px;color:var(--dim)}
+  .ghost:hover{color:var(--kerb);border-color:var(--dim)}
+
+  .banner{background:var(--red);color:#fff;font-weight:600;padding:10px 16px;text-align:center}
+  .banner.wait{background:var(--amber);color:#1b1500}
+
+  .stage{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);grid-template-rows:minmax(0,1fr) auto;gap:0 clamp(8px,3vw,40px);padding:4px clamp(16px,4vw,48px) clamp(12px,3vh,32px);max-width:1100px;width:100%;margin:0 auto}
+  .signal-col{min-height:0;position:relative}
+  .signal-col svg{position:absolute;inset:0;width:100%;height:100%}
+  .read{display:flex;flex-direction:column;justify-content:center;min-width:0}
+  .count{font:700 clamp(5.5rem,min(36vw,42vh),22rem)/.82 var(--display);color:var(--lit);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .track{height:8px;background:var(--asphalt-3);border-radius:4px;overflow:hidden;margin:clamp(10px,2.4vh,22px) 0}
+  .fillbar{height:100%;background:var(--lit);transform-origin:left center;transform:scaleX(1)}
+  .word{font:700 clamp(2.2rem,min(9vw,9vh),5.5rem)/1 var(--display);color:var(--lit)}
+  .mode{margin-top:.5em;color:var(--dim);font-size:clamp(1rem,2.4vw,1.35rem)}
+  .dirs{grid-column:1 / -1;width:min(100%,420px);margin:clamp(8px,2vh,20px) auto 0}
+  .stale .count,.stale .word,.stale .fillbar{opacity:.28}
+  .stale .signal-col,.stale .dirs{opacity:.35}
+
+  @media (max-aspect-ratio:3/4){ .stage{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:0 12px} .count{font-size:clamp(5rem,31vw,14rem)} .word{font-size:clamp(2rem,10vw,4rem)} }
+  @media (max-height:460px){ .bar{min-height:36px;padding:4px 12px} .dirs{display:none} .stage{grid-template-rows:minmax(0,1fr)} }
+</style>
+</head>
+<body data-state="O">
+<header class="bar">
+  <span class="live" id="live"><i class="dot" id="dot"></i><span id="liveText">Connecting</span></span>
+  <span class="lat" id="lat"></span>
+  <span class="fill"></span>
+  <button class="ghost" id="srv" type="button" hidden>Server</button>
+  <button class="ghost" id="fs" type="button">Full screen</button>
+</header>
+<div class="banner" id="banner" role="alert" hidden></div>
+
+<main class="stage" id="stage">
+  <section class="signal-col" id="signal" aria-label="Signal"></section>
+  <section class="read" aria-live="polite">
+    <div class="count" id="count">--</div>
+    <div class="track" aria-hidden="true"><div class="fillbar" id="fill"></div></div>
+    <div class="word" id="word">Waiting</div>
+    <div class="mode" id="mode"></div>
+  </section>
+  <section class="dirs" id="dirs"></section>
+</main>
+
+<script src="../common/server.js"></script>
+<script src="../common/signal.js"></script>
+<script src="../common/link.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const signal = new SignalView($('signal'));
+  const dirs = new DirectionView($('dirs'));
+  signal.update('O'); dirs.update(0, 'O');
+
+  const link = new TrafficLink({ role: 'guard' });
+
+  function render(s) {
+    document.body.dataset.state = s.st;
+    signal.update(s.st);
+    dirs.update(s.dir, s.st);
+    $('count').textContent = s.st === 'O' ? '--' : s.rem;
+    $('word').textContent = TrafficText.WORD[s.st];
+    $('mode').textContent = s.st === 'O' ? '' : s.pause ? 'Paused' : s.mode === 'M' ? 'Held by the controller' : 'Automatic';
+    // Progress bar: drains linearly towards the value the next one-second update will announce.
+    const running = s.mode === 'A' && !s.pause && s.st !== 'O';
+    const f = $('fill');
+    const dur = Math.max(s.dur, 1);
+    f.style.transition = 'none';
+    f.style.transform = `scaleX(${s.st === 'O' ? 0 : s.rem / dur})`;
+    if (running) {
+      void f.offsetWidth;                      // restart from the exact value, then glide
+      f.style.transition = 'transform 1s linear';
+      f.style.transform = `scaleX(${Math.max(s.rem - 1, 0) / dur})`;
+    }
+    document.title = s.st === 'O' ? 'Signal off' : `${TrafficText.WORD[s.st]} ${s.rem}`;
+  }
+
+  link.on('state', render);
+
+  link.on('status', ({ live, reason }) => {
+    const dot = $('dot'), banner = $('banner');
+    $('stage').classList.toggle('stale', !live);
+    if (live) {
+      dot.className = 'dot ok'; $('liveText').textContent = 'Live';
+      banner.hidden = true;
+    } else if (reason === 'offline') {
+      dot.className = 'dot warn'; $('liveText').textContent = 'Reconnecting';
+      banner.className = 'banner wait'; banner.hidden = false;
+      banner.textContent = 'Connection lost. Reconnecting. What you see may be out of date.' + (TrafficServer.native ? ' Check the server address.' : '');
+      $('lat').textContent = '';
+    } else {
+      dot.className = 'dot bad'; $('liveText').textContent = 'No signal data';
+      banner.className = 'banner'; banner.hidden = false;
+      banner.textContent = 'The signal controller is not responding. Do not rely on this screen.';
+    }
+  });
+
+  link.on('latency', ({ rtt }) => { if (link.live) $('lat').textContent = Math.round(rtt) + ' ms'; });
+
+  // Full screen + keep the phone awake (wake lock only works on secure origins, so it fails quietly on plain http).
+  $('fs').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  });
+  if (!document.documentElement.requestFullscreen) $('fs').hidden = true;
+  let lock = null;
+  async function keepAwake() {
+    try { if (navigator.wakeLock && !document.hidden) lock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', keepAwake);
+  keepAwake();
+
+  // Android app: remember the PC's address; let the person change it.
+  if (TrafficServer.native || TrafficServer.get()) {
+    $('srv').hidden = false;
+    $('srv').addEventListener('click', () => TrafficServer.change());
+  }
+  TrafficServer.ensure().then(() => link.connect());
+})();
+</script>
+</body>
+</html>

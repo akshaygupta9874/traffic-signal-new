@@ -1,0 +1,21 @@
+# Builds signal-guard.apk and signal-controller.apk in the cloud.
+# Push this project to a GitHub repository; open Actions > "Build Android apps" > the latest run > Artifacts.
+name: Build Android apps
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - run: node mobile/make-apk.js both
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signal-apks
+          path: mobile/out/*.apk

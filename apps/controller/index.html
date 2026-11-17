@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1E2226">
+<title>Signal controller</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../common/base.css">
+<style>
+  body{min-height:100dvh}
+  .top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px clamp(16px,3vw,32px);border-bottom:1px solid var(--line)}
+  .top h1{font:700 1.9rem/1 var(--display);margin:0 auto 0 0}
+  .chip{background:var(--asphalt-2);border-radius:999px;padding:5px 14px;font-weight:600;font-size:.95rem;white-space:nowrap}
+  .chip.mono{font-variant-numeric:tabular-nums;color:var(--dim)}
+
+  .layout{display:grid;grid-template-columns:minmax(300px,420px) minmax(0,1fr);gap:clamp(16px,3vw,40px);padding:clamp(16px,3vw,32px);max-width:1240px;margin:0 auto}
+  @media (max-width:820px){.layout{grid-template-columns:1fr}}
+
+  h2{font:600 1.25rem/1.1 var(--display);margin:0 0 12px;letter-spacing:.01em}
+  .panel{padding:18px 0 22px;border-top:1px solid var(--line)}
+  .panel:first-child{border-top:0;padding-top:0}
+
+  /* mirror: exactly what the guards see */
+  .mirror{position:sticky;top:12px;align-self:start}
+  @media (max-width:820px){.mirror{position:static}}
+  .mir-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:16px;align-items:center}
+  .mir-sig{height:min(46vh,340px)}
+  .count{font:700 clamp(4.6rem,13vw,7.6rem)/.85 var(--display);color:var(--lit);font-variant-numeric:tabular-nums}
+  .word{font:700 2rem/1.1 var(--display);color:var(--lit);margin-top:.25em}
+  .sub{color:var(--dim);margin-top:.2em}
+  .mir-dirs{margin-top:14px;max-width:300px}
+  .mirror.stale .mir-grid,.mirror.stale .mir-dirs{opacity:.3}
+
+  /* controls */
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .seg button{background:none;border:0;padding:10px 20px;font-weight:600;min-width:110px}
+  .seg button[aria-pressed="true"]{background:var(--sign);color:#fff}
+  .btn{background:var(--asphalt-2);border:1px solid var(--line);border-radius:12px;padding:10px 18px;font-weight:600}
+  .btn:hover{border-color:var(--dim)}
+  .btn.primary{background:var(--sign);border-color:var(--sign);color:#fff}
+  .btn:disabled{opacity:.4;cursor:default}
+  .btn[aria-pressed="true"]{background:var(--sign);border-color:var(--sign);color:#fff}
+
+  .lamps{display:flex;gap:clamp(12px,3vw,28px);flex-wrap:wrap}
+  .lampbtn{display:grid;justify-items:center;gap:8px;background:none;border:0;padding:0;font-weight:600}
+  .lampbtn .disc{width:84px;height:84px;border-radius:50%;border:4px solid transparent;display:block;transition:transform .08s}
+  .lampbtn:active .disc{transform:scale(.94)}
+  .lampbtn[data-k="G"] .disc{background:radial-gradient(circle at 38% 32%,#9CF5C6,var(--green) 45%,#0F8F4D)}
+  .lampbtn[data-k="Y"] .disc{background:radial-gradient(circle at 38% 32%,#FFE08A,var(--amber) 45%,#B77800)}
+  .lampbtn[data-k="R"] .disc{background:radial-gradient(circle at 38% 32%,#FF9A90,var(--red) 45%,#B8221A)}
+  .lampbtn[aria-pressed="true"] .disc{border-color:var(--kerb);box-shadow:0 0 0 4px var(--asphalt),0 0 26px var(--lit)}
+  .lampbtn[aria-pressed="false"] .disc{filter:saturate(.55) brightness(.62)}
+  .lampbtn.pending .disc{animation:pulse .6s ease-in-out infinite alternate}
+  @keyframes pulse{to{opacity:.5}}
+
+  .dirbtns{display:flex;gap:12px;flex-wrap:wrap}
+  .dirbtn{display:grid;justify-items:center;gap:6px;width:92px;padding:12px 0 10px;background:var(--asphalt-2);border:1px solid var(--line);border-radius:14px;font-weight:600}
+  .dirbtn svg{width:34px;height:34px;fill:var(--dim)}
+  .dirbtn[aria-pressed="true"]{border-color:var(--kerb);background:#15181B}
+  .dirbtn[aria-pressed="true"] svg{fill:var(--kerb)}
+
+  .timing{display:grid;grid-template-columns:repeat(3,minmax(0,150px));gap:14px;margin-bottom:12px}
+  .step label{display:block;font-weight:600;margin-bottom:6px}
+  .stepper{display:grid;grid-template-columns:40px 1fr 40px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--asphalt-2)}
+  .stepper button{background:none;border:0;font-size:1.4rem;line-height:1;padding:8px 0}
+  .stepper button:hover{background:var(--asphalt-3)}
+  .stepper input{width:100%;min-width:0;background:none;border:0;color:var(--kerb);text-align:center;font:700 1.6rem/1 var(--display);padding:8px 0;-moz-appearance:textfield}
+  .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .hint{color:var(--dim);font-size:.95rem;margin:.4em 0 0}
+
+  .log{list-style:none;margin:0;padding:0;max-height:220px;overflow:auto;font-variant-numeric:tabular-nums}
+  .log li{display:flex;gap:14px;padding:6px 0;border-top:1px solid var(--asphalt-3)}
+  .log time{color:var(--dim);min-width:5.4em}
+  .log .bad{color:var(--amber)}
+
+  /* PIN gate */
+  .gate{position:fixed;inset:0;background:rgba(18,20,23,.94);display:grid;place-items:center;padding:20px;z-index:10}
+  .gate form{background:var(--asphalt-2);border:1px solid var(--line);border-radius:18px;padding:28px;width:min(100%,360px)}
+  .gate h2{font-size:1.8rem}
+  .gate input{width:100%;margin:10px 0 6px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--asphalt);color:var(--kerb);font:600 1.4rem var(--body);letter-spacing:.2em}
+  .gate .err{color:var(--amber);min-height:1.4em}
+  .gate .btn{width:100%;margin-top:6px}
+</style>
+</head>
+<body data-state="O">
+
+<div class="gate" id="gate" hidden>
+  <form id="gateForm">
+    <h2>Controller PIN</h2>
+    <label class="dim" for="pin">Enter the PIN shown where the relay was started.</label>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="off" required>
+    <div class="err" id="gateErr" role="alert"></div>
+    <button class="btn primary" type="submit">Open controller</button>
+  </form>
+</div>
+
+<header class="top">
+  <h1>Signal controller</h1>
+  <span class="chip" id="chipLink"><i class="dot" id="dot"></i><span id="linkText">Connecting</span></span>
+  <span class="chip mono" id="chipLat">no data yet</span>
+  <span class="chip" id="chipWatch">0 guards watching</span>
+  <button class="btn" id="srv" type="button" hidden>Server</button>
+</header>
+
+<div class="layout">
+  <aside class="mirror" id="mirror">
+    <h2>What the guards see</h2>
+    <div class="mir-grid">
+      <div class="mir-sig" id="signal"></div>
+      <div>
+        <div class="count" id="count">--</div>
+        <div class="word" id="word">Waiting</div>
+        <div class="sub" id="sub"></div>
+      </div>
+    </div>
+    <div class="mir-dirs" id="dirs"></div>
+  </aside>
+
+  <main>
+    <section class="panel">
+      <h2>Cycle</h2>
+      <div class="row">
+        <div class="seg" role="group" aria-label="Cycle mode">
+          <button type="button" id="mAuto" data-cmd="A" aria-pressed="false">Automatic</button>
+          <button type="button" id="mManual" data-cmd="M" aria-pressed="false">Manual</button>
+        </div>
+        <button class="btn" type="button" id="bPause" aria-pressed="false">Pause</button>
+        <button class="btn" type="button" id="bReset" data-cmd="Z">Restart cycle</button>
+      </div>
+      <p class="hint" id="modeHint"></p>
+    </section>
+
+    <section class="panel">
+      <h2>Lamp</h2>
+      <div class="lamps">
+        <button class="lampbtn" type="button" data-k="G" data-cmd="G" aria-pressed="false"><span class="disc"></span>Green</button>
+        <button class="lampbtn" type="button" data-k="Y" data-cmd="Y" aria-pressed="false"><span class="disc"></span>Yellow</button>
+        <button class="lampbtn" type="button" data-k="R" data-cmd="R" aria-pressed="false"><span class="disc"></span>Red</button>
+      </div>
+      <p class="row" style="margin-top:14px"><button class="btn" type="button" data-cmd="X" id="bOff">All lamps off</button></p>
+    </section>
+
+    <section class="panel">
+      <h2>Directions</h2>
+      <div class="dirbtns">
+        <button class="dirbtn" type="button" data-bit="1" aria-pressed="false"><svg viewBox="-34 -34 68 68"><path transform="rotate(-90)" d="M0,-31 L27,-3 H11 V29 H-11 V-3 H-27 Z"/></svg>Left</button>
+        <button class="dirbtn" type="button" data-bit="2" aria-pressed="false"><svg viewBox="-34 -34 68 68"><path d="M0,-31 L27,-3 H11 V29 H-11 V-3 H-27 Z"/></svg>Straight</button>
+        <button class="dirbtn" type="button" data-bit="4" aria-pressed="false"><svg viewBox="-34 -34 68 68"><path transform="rotate(90)" d="M0,-31 L27,-3 H11 V29 H-11 V-3 H-27 Z"/></svg>Right</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Timing in seconds</h2>
+      <div class="timing" id="timing">
+        <div class="step"><label for="tg">Green</label><div class="stepper"><button type="button" data-d="-1" aria-label="Green shorter">&minus;</button><input id="tg" type="number" min="1" max="99" inputmode="numeric"><button type="button" data-d="1" aria-label="Green longer">+</button></div></div>
+        <div class="step"><label for="ty">Yellow</label><div class="stepper"><button type="button" data-d="-1" aria-label="Yellow shorter">&minus;</button><input id="ty" type="number" min="1" max="99" inputmode="numeric"><button type="button" data-d="1" aria-label="Yellow longer">+</button></div></div>
+        <div class="step"><label for="tr">Red</label><div class="stepper"><button type="button" data-d="-1" aria-label="Red shorter">&minus;</button><input id="tr" type="number" min="1" max="99" inputmode="numeric"><button type="button" data-d="1" aria-label="Red longer">+</button></div></div>
+      </div>
+      <div class="row"><button class="btn primary" type="button" id="bApply" disabled>Apply timing</button><span class="hint" id="timingHint" style="margin:0">Each length applies the next time that lamp starts.</span></div>
+    </section>
+
+    <section class="panel">
+      <h2>Activity</h2>
+      <ul class="log" id="log" aria-live="polite"></ul>
+    </section>
+  </main>
+</div>
+
+<script src="../common/server.js"></script>
+<script src="../common/signal.js"></script>
+<script src="../common/link.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const W = TrafficText.NAME;
+  const signal = new SignalView($('signal'));
+  const dirs = new DirectionView($('dirs'));
+  signal.update('O'); dirs.update(0, 'O');
+
+  // ---- PIN ---------------------------------------------------------------
+  let link = null;
+  const store = {
+    get() { try { return sessionStorage.getItem('pin') || ''; } catch (e) { return ''; } },
+    set(v) { try { sessionStorage.setItem('pin', v); } catch (e) {} },
+  };
+  function start(pin) {
+    if (link) return;
+    link = new TrafficLink({ role: 'controller', pin });
+    wire(link);
+    link.connect();
+  }
+  $('gateForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const pin = $('pin').value.trim();
+    $('gateErr').textContent = '';
+    if (link) { link._stop = true; link.ws && link.ws.close(); link = null; }
+    store.set(pin);
+    start(pin);
+  });
+  const urlPin = new URLSearchParams(location.search).get('pin');
+  if (urlPin) store.set(urlPin);
+  if (TrafficServer.native || TrafficServer.get()) {
+    $('srv').hidden = false;
+    $('srv').addEventListener('click', () => TrafficServer.change());
+  }
+  TrafficServer.ensure().then(() => {
+    if (store.get()) start(store.get()); else { $('gate').hidden = false; $('pin').focus(); }
+  });
+
+  // ---- log -----------------------------------------------------------------
+  const logEl = $('log');
+  function log(text, bad) {
+    const li = document.createElement('li');
+    const t = document.createElement('time');
+    t.textContent = new Date().toLocaleTimeString([], { hour12: false });
+    const s = document.createElement('span');
+    s.textContent = text; if (bad) s.className = 'bad';
+    li.append(t, s);
+    logEl.prepend(li);
+    while (logEl.children.length > 40) logEl.lastChild.remove();
+  }
+  const CMD_TEXT = (c) =>
+    ({ G: 'Green', Y: 'Yellow', R: 'Red', X: 'All lamps off', Z: 'Restart cycle', A: 'Automatic mode', M: 'Manual mode', P0: 'Resume', P1: 'Pause' }[c]
+     || (c[0] === 'D' ? 'Directions ' + (+c.slice(1)).toString(2).padStart(3, '0') : c[0] === 'T' ? 'Timing ' + c.slice(2).replace(/ /g, ' / ') + ' s' : c));
+  const REASON = { offline: 'not connected', timeout: 'no answer', 'link-down': 'controller program not reachable', denied: 'not allowed', 'too-fast': 'too many commands', 'bad-command': 'bad command', '1': 'not understood', '2': 'value out of range' };
+
+  // ---- rendering ------------------------------------------------------------
+  let last = null, timingTouched = false;
+  const inputs = [$('tg'), $('ty'), $('tr')];
+
+  function render(s) {
+    const prev = last; last = s;
+    document.body.dataset.state = s.st;
+    signal.update(s.st); dirs.update(s.dir, s.st);
+    $('count').textContent = s.st === 'O' ? '--' : s.rem;
+    $('word').textContent = s.st === 'O' ? 'Signal off' : W[s.st];
+    $('sub').textContent = s.st === 'O' ? '' : s.pause ? 'Paused' : s.mode === 'M' ? 'Held, not counting down' : 'Counting down';
+
+    document.querySelectorAll('.lampbtn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.k === s.st)));
+    $('mAuto').setAttribute('aria-pressed', String(s.mode === 'A'));
+    $('mManual').setAttribute('aria-pressed', String(s.mode === 'M'));
+    $('bPause').setAttribute('aria-pressed', String(!!s.pause));
+    $('bPause').textContent = s.pause ? 'Resume' : 'Pause';
+    $('modeHint').textContent = s.mode === 'M' ? 'The lamps stay as set until you change them.' : s.pause ? 'The countdown is frozen.' : 'The signal changes by itself: green, yellow, red.';
+    document.querySelectorAll('.dirbtn').forEach((b) => b.setAttribute('aria-pressed', String((s.dir & +b.dataset.bit) !== 0)));
+
+    if (!timingTouched) inputs.forEach((inp, i) => { if (document.activeElement !== inp) inp.value = s.cfg[i]; });
+    updateApply();
+
+    if (prev && prev.st !== s.st && !link.pending.size) log(`Signal changed to ${W[s.st].toLowerCase()}`);
+  }
+
+  function updateApply() {
+    if (!last) { $('bApply').disabled = true; return; }
+    const v = inputs.map((i) => parseInt(i.value, 10));
+    const ok = v.every((n) => n >= 1 && n <= 99);
+    const changed = v.some((n, i) => n !== last.cfg[i]);
+    $('bApply').disabled = !(ok && changed);
+    $('timingHint').textContent = ok ? `Running now: ${last.cfg.join(' / ')} s. Each length applies the next time that lamp starts.` : 'Use whole seconds from 1 to 99.';
+  }
+
+  // ---- wiring ---------------------------------------------------------------
+  const pendingBtn = new Map();
+  function sendFrom(btn, cmd) {
+    if (!link) return;
+    const id = link.send(cmd);
+    if (id && btn) { btn.classList.add('pending'); pendingBtn.set(id, btn); }
+  }
+
+  function wire(link) {
+    link.on('state', render);
+    link.on('status', ({ live, reason }) => {
+      $('mirror').classList.toggle('stale', !live);
+      $('dot').className = 'dot ' + (live ? 'ok' : reason === 'offline' ? 'warn' : 'bad');
+      $('linkText').textContent = live ? 'Live' : reason === 'offline' ? 'Reconnecting' : 'Controller program not responding';
+      if (live) { $('gate').hidden = true; log('Connected'); } else log(reason === 'offline' ? 'Connection lost' : 'No data from the controller program', true);
+    });
+    link.on('latency', ({ rtt, coreRtt }) => {
+      $('chipLat').textContent = link.live ? `browser ${Math.round(rtt)} ms, program ${coreRtt == null ? '–' : Math.round(coreRtt)} ms` : 'no data';
+    });
+    link.on('presence', ({ guards }) => { $('chipWatch').textContent = guards === 1 ? '1 guard watching' : guards + ' guards watching'; });
+    link.on('applied', (cmd, ms) => { clearPending(); log(`${CMD_TEXT(cmd)}: applied in ${ms < 10 ? ms.toFixed(1) : Math.round(ms)} ms`); });
+    link.on('rejected', (cmd, code) => { clearPending(); log(`${CMD_TEXT(cmd)}: refused (${REASON[code] || code})`, true); });
+    link.on('failed', (cmd, why) => { clearPending(); log(`${CMD_TEXT(cmd)}: not sent (${REASON[why] || why})`, true); });
+    link.on('authfail', () => { $('gate').hidden = false; $('gateErr').textContent = 'That PIN is not correct.'; store.set(''); $('pin').select(); link = null; });
+    $('chipWatch').textContent = '0 guards watching';
+  }
+  function clearPending() {
+    if (!link) return;
+    pendingBtn.forEach((b, id) => { if (!link.pending.has(id)) { b.classList.remove('pending'); pendingBtn.delete(id); } });
+  }
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.cmd) return sendFrom(b, b.dataset.cmd);
+    if (b.id === 'bPause') return sendFrom(b, last && last.pause ? 'P0' : 'P1');
+    if (b.dataset.bit && last) return sendFrom(b, 'D' + (last.dir ^ +b.dataset.bit));
+    if (b.dataset.d) {
+      const inp = b.parentElement.querySelector('input');
+      inp.value = Math.min(99, Math.max(1, (parseInt(inp.value, 10) || 1) + +b.dataset.d));
+      timingTouched = true; updateApply();
+    }
+    if (b.id === 'bApply') {
+      sendFrom(b, 'T ' + inputs.map((i) => parseInt(i.value, 10)).join(' '));
+      timingTouched = false;
+    }
+  });
+  inputs.forEach((i) => i.addEventListener('input', () => { timingTouched = true; updateApply(); }));
+
+  // Keyboard: same letters as the DOS program.
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA)$/.test(e.target.tagName) || !last) return;
+    const k = e.key.toUpperCase();
+    const map = { G: 'G', Y: 'Y', R: 'R', X: 'X', A: 'A', M: 'M', Z: 'Z' };
+    if (map[k]) return sendFrom(document.querySelector(`[data-cmd="${map[k]}"]`), map[k]);
+    if (k === ' ') { e.preventDefault(); return sendFrom($('bPause'), last.pause ? 'P0' : 'P1'); }
+    const bit = { L: 1, S: 2, D: 4 }[k];
+    if (bit) sendFrom(document.querySelector(`.dirbtn[data-bit="${bit}"]`), 'D' + (last.dir ^ bit));
+  });
+})();
+</script>
+</body>
+</html>

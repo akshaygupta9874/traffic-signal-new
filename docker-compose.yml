@@ -1,0 +1,24 @@
+# docker compose up --build
+#   controller: http://localhost:8080/controller/      guard: http://<this-PC-IP>:8080/guard/
+#   PIN=4321 docker compose up      (default PIN 1234)
+services:
+  dos:
+    build:
+      context: .
+      dockerfile: docker/dos.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"      # optional: talk to the MASM program directly (telnet 127.0.0.1 5000)
+
+  relay:
+    build:
+      context: .
+      dockerfile: docker/relay.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - dos
+    environment:
+      DOS_ADDR: dos:5000
+      CONTROL_PIN: ${PIN:-1234}
+    ports:
+      - "8080:8080"

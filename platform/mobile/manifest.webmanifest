@@ -1,0 +1,12 @@
+{
+  "name": "Traffic Signal Simulator",
+  "short_name": "Traffic Signal",
+  "description": "Educational traffic signal simulator with zoom, direction arrows and configurable timing.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0e1218",
+  "theme_color": "#0e1218",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

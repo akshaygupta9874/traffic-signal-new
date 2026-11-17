@@ -1,0 +1,12 @@
+{
+  "name": "traffic-relay",
+  "version": "1.0.0",
+  "description": "Thin relay: DOSBox COM1 (TCP) <-> WebSockets. Contains no traffic logic.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

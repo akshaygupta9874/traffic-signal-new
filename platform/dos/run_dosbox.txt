@@ -1,0 +1,10 @@
+Inside DOSBox (adjust the host path):
+
+    mount c C:\path\to\traffic-signal\platform\dos
+    c:
+    build.bat                  (MASM 6.x: ml + link; ML.EXE and LINK.EXE must be on the DOS PATH)
+    traffic                    (10 / 3 / 10 s)
+    traffic 15 4 12            (green yellow red, each 1..99 s)
+
+TASM instead of MASM:  build_tasm.bat
+Cross-assemble on Linux/macOS with UASM:  ./build_uasm.sh
